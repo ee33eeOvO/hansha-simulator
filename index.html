@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>モンスト反射シミュレーター v1.2</title>
+<style>
+:root{color-scheme:dark;--bg:#0c1220;--panel:#172238;--line:#33445f;--txt:#eef4ff;--muted:#a8b6cc;--mint:#54dfc2}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+header{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:10px}
+h1{font-size:17px;margin:0}small,.muted{color:var(--muted)}
+main{max-width:1100px;margin:auto;padding:12px;display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:12px}
+.stage,.panel{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:10px}.stage{min-width:0}
+.zoombar{display:flex;align-items:center;gap:7px;margin:0 0 8px}.zoombar button{min-width:42px}.zoombar span{font-size:12px;color:var(--muted);min-width:82px;text-align:center}.canvas-viewport{width:100%;max-height:72vh;overflow:auto;overscroll-behavior:contain;border-radius:8px;background:#101a2c;touch-action:pan-y}.canvas-viewport canvas{width:100%;height:auto;display:block;background:#101a2c;border-radius:8px;touch-action:none;max-width:none}
+.hint{font-size:12px;line-height:1.6;color:var(--muted);padding:8px 2px 1px}
+aside{display:flex;flex-direction:column;gap:10px}.panel h2{font-size:13px;margin:0 0 9px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+button,.upload{background:#2a3a54;border:1px solid #465a78;color:var(--txt);border-radius:8px;padding:10px 7px;font-size:12px;text-align:center;cursor:pointer}
+button.active,button.primary,.upload{background:#3c477e;border-color:#8b8aff}button:disabled{opacity:.4}
+.upload{display:block}.upload input{display:none}.row{display:flex;gap:7px;margin-top:7px}.row>*{flex:1}
+label{display:block;font-size:12px;color:var(--muted);margin:9px 0 4px}input[type=range]{width:100%;accent-color:var(--mint)}
+.angle{font-size:24px;font-weight:700;text-align:center;color:var(--mint);padding:5px}
+.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}.steps button{padding:9px 2px}
+.status{font-size:11px;line-height:1.6;color:var(--muted);margin-top:8px}.upload-note{font-size:11px;color:var(--muted);line-height:1.5;margin-top:7px}
+@media(max-width:760px){
+main{grid-template-columns:1fr;padding:4px;gap:8px}
+.stage{padding:4px;border-radius:10px}
+.canvas-viewport{max-height:68vh;overflow:auto}.canvas-viewport canvas{width:100%;height:auto;border-radius:6px;max-width:none}.zoombar{position:sticky;top:0;z-index:2;background:var(--panel);padding:3px 0}
+aside{display:flex;flex-direction:column;gap:8px}
+.panel{padding:12px}
+.panel h2{font-size:14px}
+button,.upload{font-size:14px;padding:13px 9px;min-height:46px}
+.grid{gap:8px}
+.grid button{min-height:48px}
+.row{gap:8px}
+input[type=range]{height:30px}
+.hint{font-size:12px;padding:7px 3px}
+header{padding:11px 12px}
+h1{font-size:15px}
+}
+</style></head><body>
+<header><div><h1>モンスト反射シミュレーター</h1><small>スマホ画面いっぱいに盤面表示・反射範囲を自由調整・ピンチズーム対応 / v1.2</small></div><small>試作版</small></header>
+<main>
+<section class="stage"><div class="zoombar"><button id="zoomOut" type="button">−</button><span id="zoomLabel">表示 100%</span><button id="zoomIn" type="button">＋</button><button id="zoomReset" type="button">全体表示</button></div><div class="canvas-viewport" id="canvasViewport"><canvas id="cv" width="600" height="760"></canvas></div><div class="hint" id="hint">スクショ全体を表示します。「範囲調整」で枠の四隅・辺をドラッグし、反射する範囲を指定してください。画像自体は切り取りません。</div></section>
+<aside>
+<div class="panel"><h2>① 背景画像</h2><label class="upload primary">スクリーンショットを読み込む<input id="image" type="file" accept="image/*"></label><div class="upload-note">画像全体を背景に表示します。反射範囲は画像上の枠で指定します。</div><div class="row"><button id="opacity">背景 100%</button><button id="clearImage">画像を外す</button></div></div>
+<div class="panel"><h2>② プレイ範囲・当たり判定</h2><div class="grid"><button class="active" data-tool="select">選択・移動</button><button data-tool="crop">範囲調整</button><button data-tool="circle">円形を追加</button><button data-tool="rect">四角形を追加</button><button data-tool="ally">味方位置（長押し→離して確定）</button><button id="resetCrop">範囲を初期化</button></div><div class="row"><button id="saveCrop" class="primary">範囲を保存</button><button id="forgetCrop">保存範囲を解除</button></div><div class="row"><button id="delete">選択物を削除</button><button id="reset">配置リセット</button></div><label for="size">選択物のサイズ</label><input id="size" type="range" min="10" max="180" value="35"><div class="status" id="sizeLabel">未選択</div><div class="status">範囲調整：枠の内側をドラッグすると移動、四隅・辺の白いハンドルをドラッグすると拡大縮小できます。</div></div>
+<div class="panel"><h2>③ 発射設定</h2><div class="angle" id="angleText">— °</div><label for="angle">発射角度</label><input id="angle" type="range" min="-180" max="180" step=".01" value="60"><div class="steps"><button data-step="-3.52">−3.52°</button><button data-step="-.35">−0.35°</button><button data-step=".35">+0.35°</button><button data-step="3.52">+3.52°</button></div><label for="bounces">反射回数：<span id="bounceText">6</span></label><input id="bounces" type="range" min="1" max="30" value="6"><div class="row"><button id="path" class="active">軌道 ON</button><button id="clearAim">角度解除</button></div><div class="status">味方キャラからドラッグして方向指定、または角度スライダーで調整。</div></div>
+<div class="panel"><h2>④ 保存・読み込み</h2><div class="row"><button class="primary" id="save">配置を保存</button><button id="load">配置を読込</button></div><div class="status" id="status">背景画像・反射範囲・当たり判定をまとめて保存できます。</div></div>
+</aside></main>
+<script>
+(()=>{
+const $=id=>document.getElementById(id);const cv=document.querySelector('#cv'),ctx=cv.getContext('2d'),viewport=$('canvasViewport');let W=cv.width,H=cv.height;let zoom=1,pointers=new Map(),pinch=null,lastTap=0;
+let img=null,imgData=null,opacity=1,objects=[],ally={x:300,y:680,r:14},tool='select',selected=null,drag=null,angle=null,show=true;
+let crop={x:25,y:145,w:550,h:455},imageRect={x:0,y:0,w:600,h:760};
+const ang=$('angle'),bounces=$('bounces'),size=$('size');
+function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
+function fitCanvasToImage(im){
+ W=600;
+ H=Math.max(760,Math.round(W*im.height/im.width));
+ cv.width=W;cv.height=H;
+ setZoom(1);
+}
+function resetCanvasSize(){
+ W=600;H=760;cv.width=W;cv.height=H;setZoom(1);
+}
+function setZoom(z,anchor){
+ zoom=clamp(z,.75,3);
+ cv.style.width=(zoom*100)+'%';
+ $('zoomLabel').textContent='表示 '+Math.round(zoom*100)+'%';
+ if(anchor){
+  const rect=cv.getBoundingClientRect(),vr=viewport.getBoundingClientRect();
+  const px=anchor.x-vr.left+viewport.scrollLeft,py=anchor.y-vr.top+viewport.scrollTop;
+  const fx=(anchor.x-rect.left)/(rect.width||1),fy=(anchor.y-rect.top)/(rect.height||1);
+  requestAnimationFrame(()=>{viewport.scrollLeft=px*zoom/(zoom||1)-fx*rect.width*0;viewport.scrollTop=py*zoom/(zoom||1)-fy*rect.height*0;});
+ }
+}
+function resetZoom(){setZoom(1);viewport.scrollTo({left:0,top:0,behavior:'smooth'})}
+function distance(a,b){return Math.hypot(a.x-b.x,a.y-b.y)}
+function midpoint(a,b){return{x:(a.x+b.x)/2,y:(a.y+b.y)/2}}
+$('zoomIn').onclick=()=>setZoom(zoom+.2);
+$('zoomOut').onclick=()=>setZoom(zoom-.2);
+$('zoomReset').onclick=resetZoom;
+
+function setTool(t){tool=t;document.querySelectorAll('[data-tool]').forEach(b=>b.classList.toggle('active',b.dataset.tool===t));
+ $('hint').textContent=({select:'当たり判定をドラッグして移動。白いハンドルでサイズ変更。味方からドラッグして発射方向を指定。',crop:'枠の内側をドラッグすると移動、四隅・辺の白いハンドルをドラッグすると範囲を調整。背景画像は切り取られません。',circle:'盤面をタップして円形の当たり判定を追加。',rect:'盤面をタップして四角形の当たり判定を追加。',ally:'盤面をタップして味方キャラの発射位置を変更。スマホでは指先より約1cm上に配置されます。'})[t];draw()}
+document.querySelectorAll('[data-tool]').forEach(b=>b.onclick=()=>setTool(b.dataset.tool));
+function point(e){let r=cv.getBoundingClientRect();return{x:(e.clientX-r.left)*W/r.width,y:(e.clientY-r.top)*H/r.height}}
+// Touch placement is lifted by about 1 cm so the user's finger does not cover the ally marker.
+function allyPlacementPoint(e){let p=point(e);if(e.pointerType==='touch'){let r=cv.getBoundingClientRect();p.y-=38*H/(r.height||1)}return p}
+function calcImageRect(){if(!img){imageRect={x:0,y:0,w:W,h:H};return}let sc=Math.min(W/img.width,H/img.height);let w=img.width*sc,h=img.height*sc;imageRect={x:(W-w)/2,y:(H-h)/2,w,h}}
+function defaultCrop(){crop={x:imageRect.x+imageRect.w*.043,y:imageRect.y+imageRect.h*.183,w:imageRect.w*.862,h:imageRect.h*.457};ally={x:crop.x+crop.w*.5,y:crop.y+crop.h*.88,r:14}}
+const CROP_KEY='hansha-simulator-saved-play-area-v1';
+function normalizedCrop(){return{x:(crop.x-imageRect.x)/imageRect.w,y:(crop.y-imageRect.y)/imageRect.h,w:crop.w/imageRect.w,h:crop.h/imageRect.h}}
+function applySavedCrop(){
+ try{
+  const raw=localStorage.getItem(CROP_KEY);if(!raw)return false;
+  const q=JSON.parse(raw);
+  if(!q||![q.x,q.y,q.w,q.h].every(Number.isFinite)||q.w<=0||q.h<=0)return false;
+  crop={x:imageRect.x+q.x*imageRect.w,y:imageRect.y+q.y*imageRect.h,w:q.w*imageRect.w,h:q.h*imageRect.h};
+  crop.x=clamp(crop.x,imageRect.x,imageRect.x+imageRect.w-20);crop.y=clamp(crop.y,imageRect.y,imageRect.y+imageRect.h-20);
+  crop.w=clamp(crop.w,20,imageRect.x+imageRect.w-crop.x);crop.h=clamp(crop.h,20,imageRect.y+imageRect.h-crop.y);
+  ally={x:crop.x+crop.w*.5,y:crop.y+crop.h*.88,r:14};
+  return true;
+ }catch(e){return false}
+}
+function saveCropPreference(){
+ try{localStorage.setItem(CROP_KEY,JSON.stringify(normalizedCrop()));$('status').textContent='反射範囲をこのブラウザに保存しました。次回の画像読み込み時にも自動適用されます。';return true}
+ catch(e){$('status').textContent='範囲を保存できませんでした。このブラウザの保存設定を確認してください。';return false}
+}
+function draw(){
+ ctx.clearRect(0,0,W,H);ctx.fillStyle='#101a2b';ctx.fillRect(0,0,W,H);
+ if(img){calcImageRect();ctx.save();ctx.globalAlpha=opacity;ctx.drawImage(img,imageRect.x,imageRect.y,imageRect.w,imageRect.h);ctx.restore()}
+ // Outside of play bounds is dimmed, but image itself remains fully visible.
+ ctx.save();ctx.fillStyle='rgba(3,8,18,.48)';ctx.beginPath();ctx.rect(0,0,W,H);ctx.rect(crop.x,crop.y,crop.w,crop.h);ctx.fill('evenodd');
+ ctx.strokeStyle=tool==='crop'?'#54dfc2':'#ffe071';ctx.lineWidth=tool==='crop'?3:2;ctx.setLineDash(tool==='crop'?[]:[8,6]);ctx.strokeRect(crop.x,crop.y,crop.w,crop.h);ctx.setLineDash([]);
+ if(tool==='crop'){let hs=handles();for(let h of hs){ctx.fillStyle='#fff';ctx.strokeStyle='#26344a';ctx.lineWidth=2;ctx.beginPath();ctx.arc(h.x,h.y,7,0,Math.PI*2);ctx.fill();ctx.stroke()}}
+ ctx.restore();
+ for(const o of objects){ctx.fillStyle=o.type==='circle'?'rgba(255,75,112,.24)':'rgba(139,117,255,.25)';ctx.strokeStyle=o.type==='circle'?'#ff7794':'#b3a5ff';ctx.lineWidth=3;
+ if(o.type==='circle'){ctx.beginPath();ctx.arc(o.x,o.y,o.r,0,Math.PI*2);ctx.fill();ctx.stroke()}else{ctx.beginPath();ctx.roundRect(o.x-o.w/2,o.y-o.h/2,o.w,o.h,5);ctx.fill();ctx.stroke()}
+ if(o===selected){ctx.save();ctx.setLineDash([6,4]);ctx.strokeStyle='white';if(o.type==='circle'){ctx.beginPath();ctx.arc(o.x,o.y,o.r+6,0,Math.PI*2);ctx.stroke()}else ctx.strokeRect(o.x-o.w/2-6,o.y-o.h/2-6,o.w+12,o.h+12);ctx.setLineDash([]);let h=objHandle(o);ctx.fillStyle='white';ctx.beginPath();ctx.arc(h.x,h.y,8,0,Math.PI*2);ctx.fill();ctx.restore()}}
+ ctx.beginPath();ctx.arc(ally.x,ally.y,ally.r,0,Math.PI*2);ctx.fillStyle='#48c8e8';ctx.fill();ctx.strokeStyle='#d7f8ff';ctx.lineWidth=3;ctx.stroke();ctx.fillStyle='#083344';ctx.font='bold 13px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('味',ally.x,ally.y);
+ if(show&&angle!==null){let pts=simulate();ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);pts.slice(1).forEach(q=>ctx.lineTo(q.x,q.y));ctx.strokeStyle='#ffe071';ctx.lineWidth=3;ctx.setLineDash([8,6]);ctx.stroke();ctx.setLineDash([])}
+ if(drag?.kind==='aim'){ctx.beginPath();ctx.moveTo(ally.x,ally.y);ctx.lineTo(drag.p.x,drag.p.y);ctx.strokeStyle='white';ctx.lineWidth=2;ctx.stroke()}
+}
+function handles(){let{x,y,w,h}=crop;return[{x,y,k:'nw'},{x:x+w/2,y,k:'n'},{x:x+w,y,k:'ne'},{x:x+w,y:y+h/2,k:'e'},{x:x+w,y:y+h,k:'se'},{x:x+w/2,y:y+h,k:'s'},{x,y:y+h,k:'sw'},{x,y:y+h/2,k:'w'}]}
+function cropHandle(p){return handles().find(h=>Math.hypot(p.x-h.x,p.y-h.y)<17)}
+function objHandle(o){return o.type==='circle'?{x:o.x+o.r*.72,y:o.y+o.r*.72}:{x:o.x+o.w/2,y:o.y+o.h/2}}
+function hit(p,o){return o.type==='circle'?Math.hypot(p.x-o.x,p.y-o.y)<o.r+9:Math.abs(p.x-o.x)<o.w/2+9&&Math.abs(p.y-o.y)<o.h/2+9}
+function simulate(){
+ let a=angle*Math.PI/180,vx=Math.cos(a),vy=-Math.sin(a),x=ally.x,y=ally.y,pts=[{x,y}],n=0,steps=0,dt=3,r=ally.r;
+ while(n<=+bounces.value&&steps<3000){let nx=x+vx*dt,ny=y+vy*dt,hitWall=false;
+ if(nx<crop.x+r){nx=crop.x+r;vx=Math.abs(vx);hitWall=true}else if(nx>crop.x+crop.w-r){nx=crop.x+crop.w-r;vx=-Math.abs(vx);hitWall=true}
+ if(ny<crop.y+r){ny=crop.y+r;vy=Math.abs(vy);hitWall=true}else if(ny>crop.y+crop.h-r){ny=crop.y+crop.h-r;vy=-Math.abs(vy);hitWall=true}
+ let collided=false;
+ for(let o of objects){if(o.type==='rect'){let l=o.x-o.w/2-r,rr=o.x+o.w/2+r,t=o.y-o.h/2-r,bb=o.y+o.h/2+r;if(nx>l&&nx<rr&&ny>t&&ny<bb){let dx=Math.min(Math.abs(nx-l),Math.abs(nx-rr)),dy=Math.min(Math.abs(ny-t),Math.abs(ny-bb));if(dx<dy)vx=-vx;else vy=-vy;nx=x+vx*dt;ny=y+vy*dt;collided=true}}else{let dx=nx-o.x,dy=ny-o.y,d=Math.hypot(dx,dy);if(d<r+o.r){let ux=dx/(d||1),uy=dy/(d||1),dot=vx*ux+vy*uy;vx-=2*dot*ux;vy-=2*dot*uy;nx=x+vx*dt;ny=y+vy*dt;collided=true}}}
+ x=nx;y=ny;steps++;if(steps%3===0)pts.push({x,y});if(hitWall||collided){n++;pts.push({x,y})}}
+ return pts
+}
+function sync(){if(!selected){$('sizeLabel').textContent='未選択';size.disabled=true;return}size.disabled=false;if(selected.type==='circle'){size.value=selected.r;$('sizeLabel').textContent='半径 '+Math.round(selected.r)+' px'}else{size.value=selected.w;$('sizeLabel').textContent=`幅 ${Math.round(selected.w)} px / 高さ ${Math.round(selected.h)} px`}}
+cv.addEventListener('pointerdown',e=>{
+ pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+ if(pointers.size===2){
+  const a=[...pointers.values()][0],b=[...pointers.values()][1],m=midpoint(a,b);
+  drag=null;pinch={startDistance:Math.max(1,distance(a,b)),startZoom:zoom,startMid:m,startScrollLeft:viewport.scrollLeft,startScrollTop:viewport.scrollTop};
+  cv.setPointerCapture(e.pointerId);return;
+ }
+ if(pointers.size>2)return;
+ let p=point(e);cv.setPointerCapture(e.pointerId);
+ if(tool==='crop'){let h=cropHandle(p);if(h){drag={kind:'cropResize',handle:h.k,start:p,original:{...crop}}}else if(p.x>=crop.x&&p.x<=crop.x+crop.w&&p.y>=crop.y&&p.y<=crop.y+crop.h){drag={kind:'cropMove',start:p,original:{...crop}}}else{drag=null}return}
+ if(tool==='circle'){selected={type:'circle',x:p.x,y:p.y,r:32};objects.push(selected);sync();draw();return}
+ if(tool==='rect'){selected={type:'rect',x:p.x,y:p.y,w:100,h:45};objects.push(selected);sync();draw();return}
+ if(tool==='ally'){let ap=allyPlacementPoint(e);drag={kind:'allyPlace',original:{...ally}};ally.x=clamp(ap.x,crop.x+ally.r,crop.x+crop.w-ally.r);ally.y=clamp(ap.y,crop.y+ally.r,crop.y+crop.h-ally.r);draw();return}
+ if(Math.hypot(p.x-ally.x,p.y-ally.y)<ally.r+20){drag={kind:'aim',p};return}
+ let o=[...objects].reverse().find(q=>hit(p,q));selected=o||null;sync();if(o){let h=objHandle(o);drag=Math.hypot(p.x-h.x,p.y-h.y)<16?{kind:'resize',o}:{kind:'move',o,dx:p.x-o.x,dy:p.y-o.y}}draw()
+});
+cv.addEventListener('pointermove',e=>{
+ if(pointers.has(e.pointerId))pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+ if(pinch&&pointers.size>=2){
+  const a=[...pointers.values()][0],b=[...pointers.values()][1],m=midpoint(a,b);
+  const next=clamp(pinch.startZoom*distance(a,b)/pinch.startDistance,.75,3);
+  const oldWidth=cv.getBoundingClientRect().width,oldHeight=cv.getBoundingClientRect().height;
+  const vr=viewport.getBoundingClientRect();
+  const fx=(pinch.startMid.x-cv.getBoundingClientRect().left)/(oldWidth||1),fy=(pinch.startMid.y-cv.getBoundingClientRect().top)/(oldHeight||1);
+  const contentX=pinch.startScrollLeft+(pinch.startMid.x-vr.left),contentY=pinch.startScrollTop+(pinch.startMid.y-vr.top);
+  setZoom(next);
+  requestAnimationFrame(()=>{const nr=cv.getBoundingClientRect();viewport.scrollLeft=contentX*next/pinch.startZoom-(m.x-vr.left);viewport.scrollTop=contentY*next/pinch.startZoom-(m.y-vr.top);});
+  return;
+ }
+ if(!drag)return;let p=point(e);
+ if(drag.kind==='allyPlace'){let ap=allyPlacementPoint(e);ally.x=clamp(ap.x,crop.x+ally.r,crop.x+crop.w-ally.r);ally.y=clamp(ap.y,crop.y+ally.r,crop.y+crop.h-ally.r)}
+ else if(drag.kind==='aim'){drag.p=p;let dx=ally.x-p.x,dy=ally.y-p.y;angle=Math.atan2(-dy,dx)*180/Math.PI;ang.value=angle;updateAngle(false)}
+ else if(drag.kind==='cropMove'){let d=drag.original;crop.x=clamp(d.x+p.x-drag.start.x,imageRect.x,imageRect.x+imageRect.w-d.w);crop.y=clamp(d.y+p.y-drag.start.y,imageRect.y,imageRect.y+imageRect.h-d.h)}
+ else if(drag.kind==='cropResize'){let d=drag.original,k=drag.handle,min=45;let l=d.x,t=d.y,r=d.x+d.w,b=d.y+d.h,dx=p.x-drag.start.x,dy=p.y-drag.start.y;
+ if(k.includes('w'))l=clamp(d.x+dx,imageRect.x,r-min);if(k.includes('e'))r=clamp(d.x+d.w+dx,l+min,imageRect.x+imageRect.w);
+ if(k.includes('n'))t=clamp(d.y+dy,imageRect.y,b-min);if(k.includes('s'))b=clamp(d.y+d.h+dy,t+min,imageRect.y+imageRect.h);
+ crop={x:l,y:t,w:r-l,h:b-t}}
+ else if(drag.kind==='move'){drag.o.x=clamp(p.x-drag.dx,crop.x,crop.x+crop.w);drag.o.y=clamp(p.y-drag.dy,crop.y,crop.y+crop.h)}
+ else if(drag.kind==='resize'){let o=drag.o;if(o.type==='circle')o.r=clamp(Math.hypot(p.x-o.x,p.y-o.y)/Math.SQRT2,10,180);else{o.w=clamp(Math.abs(p.x-o.x)*2,20,350);o.h=clamp(Math.abs(p.y-o.y)*2,20,500)}sync()}
+ draw()
+});
+function end(e){
+ const wasCancel=e&&e.type!=='pointerup';
+ if(e&&pointers.has(e.pointerId))pointers.delete(e.pointerId);
+ if(pointers.size<2)pinch=null;
+ if(pointers.size===0){
+  if(drag?.kind==='allyPlace'&&wasCancel)ally={...drag.original};
+  drag=null;draw()
+ }
+}cv.addEventListener('pointerup',end);cv.addEventListener('pointercancel',end);cv.addEventListener('lostpointercapture',end);
+cv.addEventListener('dblclick',e=>{e.preventDefault();resetZoom()});
+cv.addEventListener('touchend',e=>{const now=Date.now();if(now-lastTap<320){resetZoom()}lastTap=now},{passive:true});
+function updateAngle(redraw=true){angle=+ang.value;$('angleText').textContent=angle.toFixed(2)+'°';if(redraw)draw()}
+ang.oninput=()=>updateAngle();bounces.oninput=()=>{$('bounceText').textContent=bounces.value;draw()};
+document.querySelectorAll('[data-step]').forEach(b=>b.onclick=()=>{ang.value=clamp(+ang.value+(+b.dataset.step),-180,180);updateAngle()});
+size.oninput=()=>{if(!selected)return;let v=+size.value;if(selected.type==='circle')selected.r=v;else{let ratio=selected.h/selected.w;selected.w=v;selected.h=v*ratio}sync();draw()};
+$('image').onchange=e=>{let f=e.target.files[0];if(!f)return;let r=new FileReader();r.onload=()=>{let im=new Image();im.onload=()=>{img=im;imgData=r.result;fitCanvasToImage(im);calcImageRect();if(!applySavedCrop())defaultCrop();draw();$('status').textContent=localStorage.getItem(CROP_KEY)?'保存済みの反射範囲を適用しました。必要なら範囲調整できます。':'スクショ全体を読み込みました。枠を調整したら「範囲を保存」を押してください。';setTool('crop')};im.src=r.result};r.readAsDataURL(f);e.target.value=''};
+$('opacity').onclick=()=>{opacity=opacity===1?.55:1;$('opacity').textContent='背景 '+Math.round(opacity*100)+'%';draw()};
+$('clearImage').onclick=()=>{img=null;imgData=null;resetCanvasSize();calcImageRect();defaultCrop();draw()};
+$('saveCrop').onclick=()=>saveCropPreference();
+$('forgetCrop').onclick=()=>{try{localStorage.removeItem(CROP_KEY)}catch(e){};calcImageRect();defaultCrop();draw();$('status').textContent='保存していた反射範囲を解除しました。'};
+$('resetCrop').onclick=()=>{try{localStorage.removeItem(CROP_KEY)}catch(e){};calcImageRect();defaultCrop();draw();$('status').textContent='初期範囲に戻しました。保存範囲も解除しました。'};
+$('delete').onclick=()=>{objects=objects.filter(o=>o!==selected);selected=null;sync();draw()};
+$('reset').onclick=()=>{objects=[];selected=null;ally={x:crop.x+crop.w/2,y:crop.y+crop.h*.88,r:14};angle=null;sync();draw()};
+$('path').onclick=e=>{show=!show;e.target.textContent='軌道 '+(show?'ON':'OFF');e.target.classList.toggle('active',show);draw()};
+$('clearAim').onclick=()=>{angle=null;$('angleText').textContent='— °';draw()};
+$('save').onclick=()=>{let d={v:12,objects,ally,angle,imgData,opacity,bounces:bounces.value,crop,savedCrop:normalizedCrop()};let a=document.createElement('a'),u=URL.createObjectURL(new Blob([JSON.stringify(d)],{type:'application/json'}));a.href=u;a.download='hansha-stage-v11.json';a.click();URL.revokeObjectURL(u);$('status').textContent='背景・反射範囲・配置を保存しました。'};
+$('load').onclick=()=>{let i=document.createElement('input');i.type='file';i.accept='.json';i.onchange=()=>{let f=i.files[0];if(!f)return;let r=new FileReader();r.onload=()=>{try{let d=JSON.parse(r.result);objects=d.objects||[];ally=d.ally||ally;angle=d.angle??null;imgData=d.imgData||null;opacity=d.opacity??1;bounces.value=d.bounces||6;$('bounceText').textContent=bounces.value;crop=d.crop||crop;selected=null;sync();if(imgData){let im=new Image();im.onload=()=>{img=im;fitCanvasToImage(im);calcImageRect();if(d.savedCrop){let q=d.savedCrop;crop={x:imageRect.x+q.x*imageRect.w,y:imageRect.y+q.y*imageRect.h,w:q.w*imageRect.w,h:q.h*imageRect.h}}draw()};im.src=imgData}else{img=null;resetCanvasSize();calcImageRect();draw()}}catch{alert('保存データを読み込めませんでした')}};r.readAsText(f)};i.click()};
+calcImageRect();draw();
+})();
+</script></body></html>
